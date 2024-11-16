@@ -1,0 +1,10 @@
+{
+  "resourceName": "UserPlantAccess",
+  "tableName": "UserPlantAccess",
+  "partitionKey": {
+    "fieldName": "username",
+    "fieldType": "string"
+  },
+  "gsi": [],
+  "triggerFunctions": []
+}

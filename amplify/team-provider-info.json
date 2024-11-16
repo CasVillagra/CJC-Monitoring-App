@@ -1,0 +1,29 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-cjcmonitoringapp-dev-1bdba-authRole",
+      "UnauthRoleArn": "arn:aws:iam::989664479811:role/amplify-cjcmonitoringapp-dev-1bdba-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::989664479811:role/amplify-cjcmonitoringapp-dev-1bdba-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-cjcmonitoringapp-dev-1bdba-deployment",
+      "UnauthRoleName": "amplify-cjcmonitoringapp-dev-1bdba-unauthRole",
+      "StackName": "amplify-cjcmonitoringapp-dev-1bdba",
+      "StackId": "arn:aws:cloudformation:us-east-1:989664479811:stack/amplify-cjcmonitoringapp-dev-1bdba/1a2839f0-8e4b-11ef-ba12-127d5880d09d",
+      "AmplifyAppId": "d1ejf8owlmqsil"
+    },
+    "categories": {
+      "hosting": {
+        "amplifyhosting": {
+          "appId": "d1ejf8owlmqsil",
+          "type": "manual"
+        }
+      },
+      "auth": {
+        "cjcmonitoringappf01f4979": {}
+      },
+      "storage": {
+        "UserPlantAccess": {}
+      }
+    }
+  }
+}
