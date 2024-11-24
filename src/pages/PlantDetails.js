@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { PlantInfo } from '../components/plant-details/PlantInfo';
-import { GenerationStats, chartRefs } from '../components/plant-details/GenerationStats';
+import { GenerationStats } from '../components/plant-details/GenerationStats';
 import { DevicesList } from '../components/plant-details/DevicesList';
 import { DownloadButton } from '../components/plant-details/DownloadButton';
+import { PlantDevices } from '../components/plant-details/PlantDevices';
 
 function PlantDetails() {
   const { plantId } = useParams();
@@ -13,6 +14,7 @@ function PlantDetails() {
   const [plantData, setPlantData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     const fetchPlantData = async () => {
@@ -117,22 +119,50 @@ function PlantDetails() {
             <ArrowLeft className="h-5 w-5" />
             <span>Back to Sites</span>
           </button>
-          <DownloadButton 
-            plantData={plantData} 
-            measurements={plantData.measurements}
-            chartRefs={chartRefs}
-          />
+          <DownloadButton plantData={plantData} measurements={plantData.measurements} />
         </div>
 
         <header className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">PLANT DETAILS</h1>
+          <div className="text-2xl font-bold text-gray-900">KW TOOLBOX</div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <PlantInfo plantData={plantData} />
-          <GenerationStats measurements={plantData.measurements} />
-          <DevicesList devices={plantData.devices} />
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`${
+                activeTab === 'overview'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('devices')}
+              className={`${
+                activeTab === 'devices'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium`}
+            >
+              Devices
+            </button>
+          </nav>
         </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <PlantInfo plantData={plantData} />
+            <GenerationStats measurements={plantData.measurements} />
+            <DevicesList devices={plantData.devices} />
+          </div>
+        ) : (
+          <PlantDevices devices={plantData.devices} plantName={plantData.name} />
+        )}
       </div>
     </div>
   );

@@ -77,7 +77,7 @@ export function GenerationStats({ measurements }) {
 
   const formatChartData = (data, type) => {
     if (!data?.set) return null;
-
+  
     const chartData = data.set.map(item => {
       const date = new Date(item.time);
       let label;
@@ -98,30 +98,49 @@ export function GenerationStats({ measurements }) {
         default:
           label = '';
       }
-
+  
       return {
         x: label,
         y: parseFloat(item.pvGeneration),
         fullDate: date
       };
     });
-
+  
     const datasets = [{
       data: chartData.map(item => item.y),
       fullDates: chartData.map(item => item.fullDate)
     }];
-
+  
     if (type === 'day') {
       datasets[0].borderColor = 'rgb(59, 130, 246)';
       datasets[0].backgroundColor = 'rgba(59, 130, 246, 0.1)';
       datasets[0].tension = 0.4;
       datasets[0].fill = true;
+    } else if (type === 'month') {
+      datasets[0].backgroundColor = 'rgb(59, 130, 246)';
+      datasets[0].borderRadius = 4;
+      datasets[0].barThickness = 16;
+      datasets[0].order = 2;
+  
+      // Add benchmark line for monthly chart
+      if (data.plant?.dailyBenchmark) {
+        const benchmarkValue = parseFloat(data.plant.dailyBenchmark) * 1000; // Convert back to watts
+        datasets.push({
+          type: 'line',
+          data: new Array(chartData.length).fill(benchmarkValue),
+          borderColor: 'rgb(239, 68, 68)', // Red color
+          borderWidth: 2,
+          borderDash: [5, 5], // Dashed line
+          pointRadius: 0,
+          tension: 0,
+        });
+      }
     } else {
       datasets[0].backgroundColor = 'rgb(59, 130, 246)';
       datasets[0].borderRadius = 4;
-      datasets[0].barThickness = type === 'month' ? 16 : 24;
+      datasets[0].barThickness = 24;
     }
-
+  
     return {
       labels: chartData.map(item => item.x),
       datasets
@@ -137,7 +156,13 @@ export function GenerationStats({ measurements }) {
           title: function(context) {
             const dataset = context[0].dataset;
             const index = context[0].dataIndex;
-            const date = dataset.fullDates[index];
+            const date = dataset.fullDates?.[index];
+            
+            if (!date) {
+              return type === 'month' && context[0].dataset.type === 'line' 
+                ? 'Daily Benchmark'
+                : '';
+            }
             
             switch (type) {
               case 'day':
@@ -165,6 +190,12 @@ export function GenerationStats({ measurements }) {
             return `${value.toFixed(2)} kW`;
           }
         }
+      },
+      legend: {
+        display: type === 'month',
+        labels: {
+          filter: item => item.text === 'Daily Benchmark'
+        }
       }
     },
     scales: {
@@ -174,7 +205,8 @@ export function GenerationStats({ measurements }) {
         ticks: {
           maxRotation: 0,
           autoSkip: true,
-          maxTicksLimit: type === 'day' ? 6 : type === 'month' ? 10 : 12
+          maxTicksLimit: type === 'day' ? 6 : type === 'month' ? 10 : 12,
+          display: type !== 'month' // Hide x-axis labels for month chart
         }
       }
     }

@@ -1,82 +1,165 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Circle, AlertTriangle, XCircle, Search, ChevronUp, ChevronDown, SlidersHorizontal } from 'lucide-react';
-import clsx from 'clsx';
 
 const PlantDashboard = ({ user }) => {
   const navigate = useNavigate();
   const [plants, setPlants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState('name');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const [sortField, setSortField] = useState('status');  // Changed default sort to status
+  const [sortDirection, setSortDirection] = useState('asc');  // Changed default direction to desc
   const [statusFilter, setStatusFilter] = useState('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const API_URL = 'https://tl4uuazcjk.execute-api.us-east-1.amazonaws.com/prod/plants';
+  const API_URL = 'https://49bgmmmqnk.execute-api.us-east-1.amazonaws.com/prod';
 
+  // Status options for filtering
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'Ok', label: 'Online' },
+    { value: 'Warning', label: 'Warning' },
+    { value: 'CommunicationMonitoringFault', label: 'Communication Error' },
+    { value: 'Error', label: 'Error' },
+    { value: 'Unknown', label: 'Unknown' }
+  ];
+
+  // Status priority for sorting
+  const statusPriority = {
+    'Error': 1,
+    'CommunicationMonitoringFault': 2,
+    'Warning': 3,
+    'Unknown': 4,
+    'Ok': 5
+  };
+
+  // Fetch plants data
   useEffect(() => {
     const fetchPlants = async () => {
       try {
-        const response = await axios.get(API_URL, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(user?.signInUserSession?.accessToken?.jwtToken && {
-              'Authorization': `Bearer ${user.signInUserSession.accessToken.jwtToken}`
-            })
-          },
-        });
-        
-        const bodyData = JSON.parse(response.data.body);
-        console.log('Parsed plants data:', bodyData.plants);
-        
-        if (bodyData && bodyData.plants) {
-          setPlants(bodyData.plants);
-        }
+        const response = await axios.get(`${API_URL}/plants`);
+        console.log('Plants data:', response.data);
+
+        const plantsData = typeof response.data === 'string' 
+          ? JSON.parse(response.data) 
+          : response.data;
+
+        // Transform the data to match your component's needs
+        const plantsWithDetails = plantsData.map(plant => ({
+          id: plant.plantId,
+          name: plant.name,
+          description: plant.description,
+          timezone: plant.timezone,
+          status: plant.status || 'Unknown'
+        }));
+
+        setPlants(plantsWithDetails);
       } catch (error) {
         console.error('Error fetching plant data:', error);
+        setPlants([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchPlants();
-  }, [user]);
+  }, []);
+
+  // Calculate status counts
+  const statusCounts = useMemo(() => {
+    return plants.reduce((acc, plant) => {
+      acc[plant.status] = (acc[plant.status] || 0) + 1;
+      return acc;
+    }, {});
+  }, [plants]);
 
   const getStatusIcon = (status) => {
     switch (status) {
       case 'Ok':
         return <Circle className="h-4 w-4 text-green-500 fill-current" />;
-      case 'Unknown':
+      case 'Warning':
         return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'CommunicationMonitoringFault':
+        return <AlertTriangle className="h-4 w-4 text-orange-500" />;
       case 'Error':
         return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'Unknown':
       default:
-        return null;
+        return <AlertTriangle className="h-4 w-4 text-gray-400" />;
     }
   };
 
-  const filteredAndSortedPlants = React.useMemo(() => {
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'Ok':
+        return 'Online';
+      case 'Warning':
+        return 'Warning';
+      case 'CommunicationMonitoringFault':
+        return 'Communication Error';
+      case 'Error':
+        return 'Error';
+      case 'Unknown':
+      default:
+        return 'Unknown';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Ok':
+        return 'bg-green-50 hover:bg-green-100';
+      case 'Warning':
+        return 'bg-yellow-50 hover:bg-yellow-100';
+      case 'CommunicationMonitoringFault':
+        return 'bg-orange-50 hover:bg-orange-100';
+      case 'Error':
+        return 'bg-red-50 hover:bg-red-100';
+      default:
+        return 'hover:bg-gray-50';
+    }
+  };
+
+  const getStatusTextColor = (status) => {
+    switch (status) {
+      case 'Ok':
+        return 'text-green-700';
+      case 'Warning':
+        return 'text-yellow-700';
+      case 'CommunicationMonitoringFault':
+        return 'text-orange-700';
+      case 'Error':
+        return 'text-red-700';
+      default:
+        return 'text-gray-700';
+    }
+  };
+
+  const filteredAndSortedPlants = useMemo(() => {
     return plants
       .filter(plant => {
-        const matchesSearch = plant.name.toLowerCase().includes(search.toLowerCase()) ||
-          plant.timezone.toLowerCase().includes(search.toLowerCase());
+        const matchesSearch = plant.name.toLowerCase().includes(search.toLowerCase());
         const matchesStatus = statusFilter === 'all' || plant.status === statusFilter;
         return matchesSearch && matchesStatus;
       })
       .sort((a, b) => {
-        let comparison = 0;
         if (sortField === 'name') {
-          comparison = a.name.localeCompare(b.name);
-        } else if (sortField === 'status') {
-          comparison = a.status.localeCompare(b.status);
-        } else if (sortField === 'timezone') {
-          comparison = a.timezone.localeCompare(b.timezone);
+          return sortDirection === 'asc' 
+            ? a.name.localeCompare(b.name) 
+            : b.name.localeCompare(a.name);
         }
-        return sortDirection === 'asc' ? comparison : -comparison;
+        if (sortField === 'status') {
+          // Sort by status priority
+          const priorityA = statusPriority[a.status] || 999;
+          const priorityB = statusPriority[b.status] || 999;
+          return sortDirection === 'asc'
+            ? priorityA - priorityB
+            : priorityB - priorityA;
+        }
+        return 0;
       });
-  }, [plants, search, statusFilter, sortField, sortDirection]);
+  }, [plants, search, statusFilter, sortField, sortDirection, statusPriority]);
 
   if (loading) {
     return (
@@ -87,8 +170,31 @@ const PlantDashboard = ({ user }) => {
   }
 
   return (
-    <div>
-      <div className="bg-white rounded-xl shadow-sm mb-6">
+    <div className="p-6">
+      {/* Status Summary */}
+      <div className="bg-white rounded-xl shadow-sm mb-6 p-4">
+        <h2 className="text-lg font-semibold mb-3">Sites Overview</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {statusOptions.slice(1).map(option => (
+            <div 
+              key={option.value}
+              className={`p-3 rounded-lg border ${option.value === 'Ok' ? 'border-green-200' : 'border-gray-200'}`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {getStatusIcon(option.value)}
+                <span className="text-sm font-medium">{option.label}</span>
+              </div>
+              <div className="text-2xl font-bold">
+                {statusCounts[option.value] || 0}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="bg-white rounded-xl shadow-sm">
+        {/* Search and Filters */}
         <div className="p-4 border-b border-gray-100">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
@@ -117,15 +223,17 @@ const PlantDashboard = ({ user }) => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="block w-full pl-3 pr-10 py-2 text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="all">All Status</option>
-                <option value="Ok">Online</option>
-                <option value="Unknown">Unknown</option>
-                <option value="Error">Error</option>
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
           )}
         </div>
 
+        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -154,9 +262,31 @@ const PlantDashboard = ({ user }) => {
                     )}
                   </button>
                 </th>
-                <th className="text-left p-4">Status</th>
+                <th className="text-left p-4">
+                  <button
+                    onClick={() => {
+                      if (sortField === 'status') {
+                        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortField('status');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    className="flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900"
+                  >
+                    Status
+                    {sortField === 'status' ? (
+                      sortDirection === 'asc' ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )
+                    ) : (
+                      <ChevronUp className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="text-left p-4">Timezone</th>
-                <th className="text-left p-4">Performance</th>
               </tr>
             </thead>
             <tbody>
@@ -164,37 +294,24 @@ const PlantDashboard = ({ user }) => {
                 <tr
                   key={plant.id}
                   onClick={() => navigate(`/plant/${plant.id}`)}
-                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                  className={`border-b border-gray-100 cursor-pointer ${getStatusColor(plant.status)}`}
                 >
                   <td className="p-4">
                     <div className="font-medium text-gray-900">{plant.name}</div>
+                    {plant.description && (
+                      <div className="text-sm text-gray-500">{plant.description}</div>
+                    )}
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(plant.status)}
-                      <span className={clsx(
-                        'text-sm',
-                        plant.status === 'Ok' && 'text-green-700',
-                        plant.status === 'Unknown' && 'text-yellow-700',
-                        plant.status === 'Error' && 'text-red-700'
-                      )}>
-                        {plant.status}
+                      <span className={`text-sm ${getStatusTextColor(plant.status)}`}>
+                        {getStatusText(plant.status)}
                       </span>
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className="text-gray-600">{plant.timezone}</span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <div className={clsx(
-                        'w-2.5 h-2.5 rounded-full',
-                        plant.underperforming ? 'bg-red-500' : 'bg-green-500'
-                      )} />
-                      <span className="text-sm text-gray-600">
-                        {plant.underperforming ? 'Below Target' : 'On Target'}
-                      </span>
-                    </div>
+                    <div className="text-gray-600">{plant.timezone}</div>
                   </td>
                 </tr>
               ))}

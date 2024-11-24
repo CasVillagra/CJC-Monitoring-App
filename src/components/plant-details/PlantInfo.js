@@ -18,10 +18,72 @@ const defaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
+function getAlertLevel(plantData) {
+  // Default to 0 (good standing)
+  let alertLevel = 0;
+
+  // Check for communication issues (level 1)
+  const lastUpdate = new Date(plantData.lastUpdated);
+  const now = new Date();
+  const hoursSinceLastUpdate = (now - lastUpdate) / (1000 * 60 * 60);
+  
+  if (hoursSinceLastUpdate >= 24) {
+    return 1; // Communication issue
+  }
+
+  // Check for performance issues
+  if (plantData.performanceRatio) {
+    const ratio = parseFloat(plantData.performanceRatio);
+    
+    // Severe underperformance (level 3)
+    if (ratio < 80) {
+      return 3;
+    }
+    
+    // Moderate underperformance (level 2)
+    if (ratio >= 80 && ratio < 93) {
+      return 2;
+    }
+  }
+
+  return alertLevel;
+}
+
+function getAlertColor(level) {
+  switch (level) {
+    case 0:
+      return 'bg-green-500'; // Good
+    case 1:
+      return 'bg-gray-500';  // Communication issue
+    case 2:
+      return 'bg-yellow-500'; // Moderate alert
+    case 3:
+      return 'bg-red-500';   // Urgent alert
+    default:
+      return 'bg-gray-300';
+  }
+}
+
+function getAlertDescription(level) {
+  switch (level) {
+    case 0:
+      return 'System operating normally';
+    case 1:
+      return 'Communication issue detected';
+    case 2:
+      return 'Moderate performance issue';
+    case 3:
+      return 'Severe performance issue';
+    default:
+      return 'Status unknown';
+  }
+}
+
 export function PlantInfo({ plantData }) {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(false);
   const hasLocation = plantData?.location?.latitude && plantData?.location?.longitude;
+  const alertLevel = getAlertLevel(plantData);
 
   useEffect(() => {
     const fetchWeather = async () => {
@@ -69,13 +131,19 @@ export function PlantInfo({ plantData }) {
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Status:</span>
           <div className="flex items-center gap-2">
-            <CircleDot className={`h-4 w-4 ${
-              plantData?.status === 'Ok' ? 'text-green-500' :
-              plantData?.status === 'Unknown' ? 'text-yellow-500' : 'text-red-500'
-            }`} />
-            <span className="font-medium">{plantData?.status}</span>
+            <div className={`h-2.5 w-2.5 rounded-full ${getAlertColor(alertLevel)}`} />
+            <span className="font-medium">{getAlertDescription(alertLevel)}</span>
           </div>
         </div>
+
+        {plantData.performanceRatio && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-600">Performance Ratio:</span>
+            <span className="font-medium">
+              {parseFloat(plantData.performanceRatio).toFixed(1)}%
+            </span>
+          </div>
+        )}
 
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Local Time:</span>

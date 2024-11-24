@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Upload, Plus, Save, Trash2, AlertTriangle, X } from 'lucide-react';
+import axios from 'axios';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -7,17 +8,6 @@ const MONTHS = [
 ];
 
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-const PREDEFINED_SITES = [
-  'McCaslin North',
-  'McCaslin South',
-  'Beech Ranch',
-  'Mayer Ranch',
-  'RBG #1',
-  'RBG #3',
-  '58 ranch',
-  'Sullivan Ranch'
-];
 
 function Benchmarks() {
   const [sites, setSites] = useState([]);
@@ -29,17 +19,42 @@ function Benchmarks() {
   const [monthlyValues, setMonthlyValues] = useState({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [siteToDelete, setSiteToDelete] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load saved benchmarks from localStorage on component mount
+  // Load sites and benchmarks on component mount
   useEffect(() => {
-    const savedBenchmarks = localStorage.getItem('solarBenchmarks');
-    if (savedBenchmarks) {
-      const { sites, monthly, daily } = JSON.parse(savedBenchmarks);
-      setSites(sites);
-      setMonthlyBenchmarks(monthly);
-      setDailyBenchmarks(daily);
-    }
+    fetchSites();
+    fetchBenchmarks();
   }, []);
+
+  const fetchSites = async () => {
+    try {
+      const response = await axios.get('https://tl4uuazcjk.execute-api.us-east-1.amazonaws.com/prod/plants');
+      const data = JSON.parse(response.data.body);
+      setSites(data.plants.map(plant => ({
+        id: plant.plantId,
+        name: plant.name
+      })));
+    } catch (error) {
+      console.error('Error fetching sites:', error);
+      setError('Failed to load sites');
+    }
+  };
+
+  const fetchBenchmarks = async () => {
+    try {
+      const response = await axios.get('https://tl4uuazcjk.execute-api.us-east-1.amazonaws.com/prod/benchmarks');
+      const data = JSON.parse(response.data.body);
+      setMonthlyBenchmarks(data.monthlyBenchmarks || {});
+      setDailyBenchmarks(data.dailyBenchmarks || {});
+    } catch (error) {
+      console.error('Error fetching benchmarks:', error);
+      setError('Failed to load benchmarks');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculateDailyBenchmark = (monthlyValue, monthIndex) => {
     const days = DAYS_IN_MONTH[monthIndex];
@@ -68,47 +83,44 @@ function Benchmarks() {
   const handleAddNewSite = () => {
     if (!selectedSite) return;
     
-    const newSiteId = `site-${Date.now()}`;
-    const newSite = { id: newSiteId, name: selectedSite };
-    
-    setSites(prev => [...prev, newSite]);
-    setEditingSite(newSite);
-    setMonthlyValues({});
-    setShowSiteForm(true);
+    const site = sites.find(s => s.name === selectedSite);
+    if (site) {
+      setEditingSite(site);
+      setMonthlyValues(monthlyBenchmarks[site.id] || {});
+      setShowSiteForm(true);
+    }
   };
 
-  const handleSaveSiteBenchmarks = () => {
-    const siteId = editingSite.id;
-    
-    setMonthlyBenchmarks(prev => ({
-      ...prev,
-      [siteId]: monthlyValues
-    }));
+  const handleSaveSiteBenchmarks = async () => {
+    try {
+      const siteId = editingSite.id;
+      const benchmarkData = {
+        siteId,
+        siteName: editingSite.name,
+        monthlyData: monthlyValues,
+        dailyData: updateDailyBenchmarks(siteId, monthlyValues)
+      };
 
-    setDailyBenchmarks(prev => ({
-      ...prev,
-      [siteId]: updateDailyBenchmarks(siteId, monthlyValues)
-    }));
+      await axios.post('https://tl4uuazcjk.execute-api.us-east-1.amazonaws.com/prod/benchmarks', benchmarkData);
 
-    // Save to localStorage
-    const data = {
-      sites,
-      monthly: {
-        ...monthlyBenchmarks,
+      setMonthlyBenchmarks(prev => ({
+        ...prev,
         [siteId]: monthlyValues
-      },
-      daily: {
-        ...dailyBenchmarks,
-        [siteId]: updateDailyBenchmarks(siteId, monthlyValues)
-      }
-    };
-    localStorage.setItem('solarBenchmarks', JSON.stringify(data));
+      }));
 
-    // Reset form
-    setShowSiteForm(false);
-    setEditingSite(null);
-    setMonthlyValues({});
-    setSelectedSite('');
+      setDailyBenchmarks(prev => ({
+        ...prev,
+        [siteId]: updateDailyBenchmarks(siteId, monthlyValues)
+      }));
+
+      setShowSiteForm(false);
+      setEditingSite(null);
+      setMonthlyValues({});
+      setSelectedSite('');
+    } catch (error) {
+      console.error('Error saving benchmarks:', error);
+      alert('Failed to save benchmarks');
+    }
   };
 
   const handleDeleteClick = (site) => {
@@ -116,28 +128,28 @@ function Benchmarks() {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (siteToDelete) {
-      setSites(prev => prev.filter(site => site.id !== siteToDelete.id));
-      setMonthlyBenchmarks(prev => {
-        const { [siteToDelete.id]: removed, ...rest } = prev;
-        return rest;
-      });
-      setDailyBenchmarks(prev => {
-        const { [siteToDelete.id]: removed, ...rest } = prev;
-        return rest;
-      });
-
-      // Save to localStorage
-      const data = {
-        sites: sites.filter(site => site.id !== siteToDelete.id),
-        monthly: monthlyBenchmarks,
-        daily: dailyBenchmarks
-      };
-      localStorage.setItem('solarBenchmarks', JSON.stringify(data));
+      try {
+        await axios.delete(`https://tl4uuazcjk.execute-api.us-east-1.amazonaws.com/prod/benchmarks/${siteToDelete.id}`);
+        
+        setMonthlyBenchmarks(prev => {
+          const { [siteToDelete.id]: removed, ...rest } = prev;
+          return rest;
+        });
+        
+        setDailyBenchmarks(prev => {
+          const { [siteToDelete.id]: removed, ...rest } = prev;
+          return rest;
+        });
+        
+        setShowDeleteModal(false);
+        setSiteToDelete(null);
+      } catch (error) {
+        console.error('Error deleting benchmark:', error);
+        alert('Failed to delete benchmark');
+      }
     }
-    setShowDeleteModal(false);
-    setSiteToDelete(null);
   };
 
   const exportToCSV = () => {
@@ -162,6 +174,26 @@ function Benchmarks() {
     URL.revokeObjectURL(url);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-600">Loading benchmarks...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-700">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
@@ -175,10 +207,10 @@ function Benchmarks() {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select a site...</option>
-                {PREDEFINED_SITES
-                  .filter(site => !sites.some(s => s.name === site))
+                {sites
+                  .filter(site => !monthlyBenchmarks[site.id])
                   .map(site => (
-                    <option key={site} value={site}>{site}</option>
+                    <option key={site.id} value={site.name}>{site.name}</option>
                   ))
                 }
               </select>
@@ -274,7 +306,7 @@ function Benchmarks() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sites.map(site => (
+                  {sites.filter(site => monthlyBenchmarks[site.id]).map(site => (
                     <tr key={site.id} className="border-b border-gray-200">
                       <td className="py-3 px-4 font-medium">{site.name}</td>
                       {MONTHS.map((month, i) => {
@@ -303,10 +335,10 @@ function Benchmarks() {
                       </td>
                     </tr>
                   ))}
-                  {sites.length === 0 && (
+                  {sites.filter(site => monthlyBenchmarks[site.id]).length === 0 && (
                     <tr>
                       <td colSpan={14} className="py-8 text-center text-gray-500">
-                        No sites added yet. Select a site from the dropdown above to add benchmarks.
+                        No benchmarks added yet. Select a site from the dropdown above to add benchmarks.
                       </td>
                     </tr>
                   )}
@@ -332,7 +364,7 @@ function Benchmarks() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sites.map(site => (
+                  {sites.filter(site => dailyBenchmarks[site.id]).map(site => (
                     MONTHS.map((month, i) => {
                       const monthNum = i + 1;
                       const benchmark = dailyBenchmarks[site.id]?.[monthNum];
@@ -368,7 +400,7 @@ function Benchmarks() {
                 <h3 className="text-lg font-semibold">Delete Site</h3>
               </div>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to delete {siteToDelete?.name}? This action cannot be undone.
+                Are you sure you want to delete benchmarks for {siteToDelete?.name}? This action cannot be undone.
               </p>
               <div className="flex justify-end gap-4">
                 <button
